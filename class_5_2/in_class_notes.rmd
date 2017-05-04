@@ -1,0 +1,93 @@
+
+```{r}
+library("rstan", quietly = T)
+library("tidyverse", quietly = T)
+library("magrittr", quietly = T)
+
+##this is where the data is
+URL <- "https://raw.githubusercontent.com/carlislerainey/priors-for-separation/master/br-replication/data/need.csv"
+```
+
+```{r}
+##sy: this function automatically centers covariates.  rstanarm has this function built into it already
+autoscale <- function(x, center = TRUE, scale = TRUE) {
+  nvals <- length(unique(x))
+  if (nvals <= 1) {
+    out <- x
+  } else if (nvals == 2) {
+    out <- if (scale) {
+      (x - min(x, na.rm = TRUE)) / diff(range(x, finite = TRUE))
+    } else x
+    if (center) {
+      out <- x - mean(x)
+    }
+  } else {
+    out <- if (center) {
+      x - mean(x, na.rm = TRUE)
+    } else x
+    out <- if (scale) out / sd(out, na.rm = TRUE)
+  }
+  out
+}
+
+
+```
+
+###Define model
+```{r}
+
+
+
+f <- (oppose_expansion ~ dem_governor + obama_win + gop_leg + percent_uninsured +
+        income + percent_nonwhite + percent_metro)
+```
+
+### Get data and set up 
+```{r}
+br <- read_csv(URL) %>%
+  mutate(oppose_expansion = 1 - support_expansion,
+         dem_governor = -1 * gop_governor,
+         obama_win = as.integer(obama_share >= 0.5),
+         percent_nonwhite = percent_black + percent_hispanic)%>%
+  rename(gop_leg = legGOP) %>%
+  # keep only variables in the formula
+  model.frame(f, data = .) %>%
+  # drop missing values (if any?)
+  drop_na()
+
+```
+use the centering/standardizing function
+```{r}
+br_scaled <- br %>%
+  # Autoscale all vars but response
+  mutate_at(vars(-oppose_expansion), autoscale)
+```
+
+Run the simple GLM
+```{r}
+glm(f, data = br, family = "binomial") %>% summary()
+```
+Run the rstanarm model.  This is a built in function that has a default prior.  It automatically adjusts scale 
+```{r}
+library("rstanarm")  ##sy: has some stan glm functions
+fit1<-stan_glm(f, data = br, family = "binomial")
+fit2<-stan_glm(f, data = br, prior = NULL, family = "binomial")
+
+summary(fit1)
+help("prior_summary")
+```
+The GLM version includes priors, so the uncertainty decreases from the regular glm model
+
+
+
+```{r}
+library(bayesplot, quietly=T)
+##fit1 had the prior
+mcmc_dens(as.array(fit1), "dem_governor")
+
+##fit2 ran w/o prior
+mcmc_dens(as.array(fit2), "dem_governor")
+
+```
+The model w/o prior has much more extreme values and a larger distribution overall
+

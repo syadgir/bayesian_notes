@@ -34,11 +34,11 @@ transformed parameters {
 model {
   // priors
   b ~ normal(b_loc, b_scale);
-  sigma ~ cauchy(0, sigma_scale);  ##sy: cauchy is commonly used for SD prior
+  sigma ~ cauchy(0, sigma_scale);
   // likelihood
   y ~ normal(mu, sigma);
 }
-generated quantities {  ##sy: can create any quantity, specify here
+generated quantities {
   # hardcoded marginal effectx
   vector[M] dydx;
   dydx = b[idx_b_slavicshare] + b[idx_b_slavicshare_changenonslav] * changenonslav;

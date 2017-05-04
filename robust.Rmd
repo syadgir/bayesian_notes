@@ -5,6 +5,9 @@
 ```{r message=FALSE}
 library("rubbish")
 library("VGAM")
+library("tidyverse")
+library("rstan")
+library("bayesplot")
 ```
 
 
@@ -19,6 +22,9 @@ This plots the normal, Double Exponential (Laplace), and Student-t (df = 4) dist
 Higher surprise is a lower log-likelihood.
 Both the Student-t and Double Exponential distributions have surprise values well below the normal in the ranges (-6, 6).[^tailareas]
 This means that outliers impose less of a penalty on the log-posterio models using these distributions, and the regression line would need to move less to incorporate those observations since the error distribution will not consider them as unusual.
+
+##sy:we are fitting multiple bayesian models with different distributions as the priors as part of the 'robust regression' process: we want to see which distribution gives posterior predictions of our outcome that fits the data the best
+
 
 [^tailareas]: The Double Exponential distribution still has a thinner tail than the Student-t at higher values.
 
@@ -43,8 +49,10 @@ bind_rows(
 
 
 ```{r include=FALSe}
-mod_t <- stan_model("stan/rlm.stan")
+mod_t <- stan_model("stan/rlm.stan")  ##just compiles the model, haven't given it any data
 ```
+
+
 ```{r}
 unionization <- read_tsv("data/western1995/unionization.tsv",
          col_types = cols(
@@ -54,9 +62,9 @@ unionization <- read_tsv("data/western1995/unionization.tsv",
               labor_force_size = col_number(),
               econ_conc = col_double()
             ))
-mod_t_data <- preprocess_lm(union_density ~ left_government + log(labor_force_size) + econ_conc, data = unionization)
+mod_t_data <- lm_preprocess(union_density ~ left_government + log(labor_force_size) + econ_conc, data = unionization)
                                    
-mod_data <- within(mod_data, {
+mod_data <- within(mod_t_data, {
   b_loc <- 0
   b_scale <- 100
   sigma_scale <- sd(y)
@@ -77,6 +85,33 @@ mod_t_fit <- sampling(mod_t, data = mod_data, control = list(max_treedepth = 11)
 
 ```{r output=FALSE}
 summary(mod_t_fit, pars = c("nu", "sigma", "b"))$summary
+```
+####Check out the bayesplot package, which 
+```{r}
+mcmc_violin(as.array(mod_t_fit), regex_pars="b")  ##a violin plot for each chain
+
+mcmc_dens(as.array(mod_t_fit), regex_pars="b")  ##posterior distribution of mcmc draws
+
+stan_trace(mod_t_fit, pars="b")
+
+mcmc_pairs(as.array(mod_t_fit), regex_pars = "b")
+```
+
+####can also look at posterior predictive checks with bayesplot
+#####We can calculate error of prediction at each value of our outcome, instead of just taking the error from the observed and the 'mean' predicted value (what we'd get with just one linear regression)
+```{r}
+##two methods
+#Compare the overall fit
+###we want to compare the probability of y|parameters and the expected values of future errors.. we use cross val.  Information criteria gets at cross validation w/o the computational heftiness of cross val.  Leave one out (loo package) leaves out 1 observation
+```
+#Evaluate a 'bayesian posterior p-value'
+```{r}
+##sy:this function gets posterior prediction stats
+
+y<-mod_data$y ##sy: get original data
+y_rep<-rstan::extract(mod_t_fit, "y_rep")[[1]] ##sy: get our predictions from the model
+ppc_stat(y=y, yrep=y_rep, stat="sd")
+ppc_stat(y=y, yrep=y_rep, stat="mean")
 ```
 
 Compare those results when using a model with 

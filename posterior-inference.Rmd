@@ -4,8 +4,13 @@
 
 The `r rpkg("haven")` package is used to read Stata `.dta` files.
 ```{r}
-library("rubbish")
+library(devtools)
+#install_github("jrnold/rubbish")
+library("rubbish")  ##sy: jrnold's package, has a  script that pre-processes data in the same way as lm (eg, makes the model matrix)
 library("haven")
+library(data.table)
+library(rstan)
+library(bayesplot)
 ```
 
 ### Introduction
@@ -49,6 +54,7 @@ $$
 
 ```{r}
 alexseev <- read_dta("data/alexseev.dta")
+#alexseev<-as.data.table(alexseev)
 ```
 
 The regression that is run
@@ -59,7 +65,7 @@ lm(mod_f, data = alexseev)
 
 Use the `lm_preprocess` function in the [rubbish](https://jrnold.github.com/rubbish) package to turn the model formula into a list with relevant data.
 ```{r}
-mod_data <- lm_preprocess(mod_f, data = alexseev)[c("X", "y")]
+mod_data <- lm_preprocess(mod_f, data = alexseev)[c("X", "y")]  ##sy: this function from jrnold's 'rubbish' package, and it makes the appropriate model matrix
 mod_data <- within(mod_data, {
   n <- nrow(X)
   k <- ncol(X)
@@ -72,18 +78,22 @@ mod_data <- within(mod_data, {
     which(colnames(X) == "slavicshare:changenonslav")
   b_loc <- 0
   # data appropriate prior
-  b_scale <- max(apply(X, 2, sd)) * 3
+  b_scale <- max(apply(X, 2, sd)) * 3  ##sy: standardize the data
   sigma_scale <- sd(y)
 })
 ```
+
+
 ```{r include = FALSE}
 mod <- stan_model("stan/ex-alexseev.stan")
 ```
+
+
 ```{r include=FALSE}
-mod_fit <- sampling(mod, data = mod_data)
+mod_fit <- sampling(mod, data = mod_data)  ##sy: sampling from rstan
 ```
 
-Get the mean of dydx
+Get the mean of dydx-this is the 
 ```{r}
 dydx <- get_posterior_mean(mod_fit, pars = "dydx")
 ggplot(tibble(changenonslav = mod_data$changenonslav,
